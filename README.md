@@ -66,8 +66,9 @@ Liseur 走另一条路：**书是 EPUB，公式是正文里的 LaTeX 源码，�
 死结在于"EPUB 的质量上限由阅读器决定"，所以把渲染这一半拿回自己手里。
 
 为此我建了一条管线：扫描版/数字版 STEM PDF → OCR → **LaTeX + bbox + 图片哈希的中间归档** →
-EPUB3 / `.tex` / Markdown，配**三层质检**（本地确定性检查 + 文本模型主筛 + 视觉模型修正，
-约 ￥5/本，比整本书丢给视觉模型便宜一个数量级），目前跑通 **123 本 / 23,207 页**
+EPUB3 / `.tex` / Markdown，配**三层质检**（本地确定性检查 + 文本模型主筛 + 视觉模型修正）。
+全程跑在免费额度上——DeepSeek-OCR、Z.ai 的免费 flash 模型、MinerU 免费档、Google AI Studio
+免费模型，**现金成本 0**，真正的预算是每天的请求额度。目前跑通 **123 本 / 23,207 页**
 （Tao《Analysis II》、《Topological Picturebook》、《数值分析》……）。
 
 完整记录、判据、实测数字和可复现命令：
@@ -181,8 +182,8 @@ crash-on-every-launch when a book was deleted outside the app.
 Upstream is [chmouel/liseur](https://github.com/chmouel/liseur) by Chmouel Boudjnah, MIT licensed;
 all base functionality is his. The companion pipeline that converts STEM PDFs into these EPUBs is
 documented in [`docs/stem-pdf-to-epub.zh-CN.md`](docs/stem-pdf-to-epub.zh-CN.md) (Chinese):
-123 books / 23,207 pages converted so far, formula quality checked by a three-tier gate at
-roughly ￥5 a book. **Convert your PDFs.** A formula that became an image is a book that can no
-longer search itself.
+123 books / 23,207 pages converted so far, formula quality checked by a three-tier gate that runs
+entirely on free API quotas — no cash spent. **Convert your PDFs.** A formula that became an image
+is a book that can no longer search itself.
 
 </details>
