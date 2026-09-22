@@ -182,6 +182,35 @@ make check                       # 测试 + lint + debug 构建
 这是政治判断，不是技术结论，所以我把它写在技术文档里。
 本仓库不托管、不分发任何书或成品：这里只有代码——把 PDF 变成机器读得懂的书的那部分代码。
 
+### 一本书不等于它版权登记在谁名下
+
+版税买的是印刷、发行和书名页上那个名字的位置，买不到内容本身。一本实变函数里的积分号不是
+哪家出版社发明的：它是两百年间几百个人写下的东西，最后一个人只是把它排成了铅字。
+**说内容"完全属于"出版方，是把搬运工说成了作者。** 我不接受这个前提，所以也不接受由它推出
+的结论——一份人类写下的数学，因为它有权利人，就该同时禁止被检索、被索引、被机器读懂。
+
+### 转格式本身就是在保存
+
+这才是我觉得最被低估的一件事。扫描件是**易碎**的：
+
+| | 扫描版 PDF | 转出来的 EPUB / LaTeX |
+|---|---|---|
+| 一本 300 页的书 | 几百 MB（每页一张图） | 几百 KB 到几 MB（两三个数量级） |
+| 能不能改 | 不能。版面即像素，改一处要重做整页 | 能。文本、公式源码、结构都是可编辑的 |
+| 十年后还能读吗 | 赌某个 PDF 阅读器还认这套编码 | 赌 UTF-8 和 LaTeX 还活着——这个赌约不用赌 |
+| 灾备成本 | 存 1000 本要 TB 级存储 | 同样 1000 本只要几 GB，一份同步盘就装下 |
+
+**体积越小、越能被复制越多次、存得越久；能被编辑的，才谈得上被修正和续写。** 一张扫描页
+坏了就是坏了，一行 LaTeX 错了可以有人改。把书从像素里搬出来，不是为了在手机上看清楚一点，
+是为了让它们在格式更迭、纸张酸化、硬盘消磁之后**还有下半段命**。
+这一步在数学上尤其值钱：公式一旦退化成图片，整本书就再也搜不到自己了。
+
+### 这只是开头
+
+123 本已经入库，324 本还在排队，机时不等人。把 PDF 变成语料的那套东西还在长——更多的书、
+可验证的数学语料层、以及现在还不方便写出来的那几步。方向就一个：**让写下来的东西被读得懂，
+包括被机器读懂。** 想做同一件事的人，代码都在这里。
+
 ## 归属与许可
 
 **MIT**（[`LICENSE`](LICENSE)），与上游一致；我**不**对上游代码主张任何额外权利。
@@ -216,7 +245,11 @@ all base functionality is his. The companion pipeline that converts STEM PDFs in
 documented in [`docs/stem-pdf-to-epub.zh-CN.md`](docs/stem-pdf-to-epub.zh-CN.md) (Chinese):
 128,532 formulae as LaTeX rather than images, 23,207 pages converted so far, three-tier quality
 gate, all of it on free API quotas and no cash spent. The point is not a nicer ebook — it is that
-a scanned page cannot be indexed, searched, or trained on, and a text page can. **Convert your
-PDFs.** A formula that became an image is a book that can no longer search itself.
+a scanned page cannot be indexed, searched, or trained on, and a text page can. Nor is a book
+simply what its rights holder says it is: the mathematics inside it was written by hundreds of
+people over two centuries, and the publisher set it in type. **Conversion is itself preservation**
+— a few hundred kilobytes of editable text survives duplication, format churn and disk failure
+where hundreds of megabytes of page scans do not. **Convert your PDFs.** A formula that became an
+image is a book that can no longer search itself. This is the beginning, not the end.
 
 </details>
