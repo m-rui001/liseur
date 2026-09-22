@@ -8,7 +8,8 @@
 </p>
 
 <p align="center">
-  开源 Android EPUB 阅读器 · 公式是真公式 · 离线可用 · 无广告无追踪 · MIT
+  开源 Android EPUB 阅读器 · 公式是真公式 · 离线可用 · 无广告无追踪 · MIT<br>
+  <b>目标：让 STEM 书变成机器读得懂的文本，而不是一摞扫描页。</b>
 </p>
 
 ---
@@ -74,9 +75,9 @@ EPUB3 / `.tex` / Markdown，配**三层质检**（本地确定性检查 + 文本
 完整记录、判据、实测数字和可复现命令：
 **[`docs/stem-pdf-to-epub.zh-CN.md`](docs/stem-pdf-to-epub.zh-CN.md)**。
 
-> **把 PDF 转成 EPUB 吧。** 你书架上那本吃灰的扫描版教材，值得变成手机上能搜索、能做笔记、
-> 能躺着读的书。公式退化成图片的那一刻，这本书就再也搜不到自己了。
-> （自用请留意扫描件版权：转制仅供个人阅读。）
+> **把你手边的 PDF 转成 EPUB。** 公式一旦退化成图片，这本书就再也搜不到自己了——它从"可检索的
+> 知识"掉回"一摞扫描页"，谁都得重新读一遍，包括模型。转一本的机时是几个小时，换来的是一段
+> 能查、能引、能喂给机器的文本。
 
 ## 界面
 
@@ -150,6 +151,37 @@ make check                       # 测试 + lint + debug 构建
   </a>
 </p>
 
+## 为什么要做这件事
+
+**这不只是为了我读书舒服。**
+
+一本实变函数，作者写三四年，拿走零售价的 8~12%；定价权在出版方手里，同一本书加密的电子版
+常常比纸质还贵。知识生产出来之后，第一件事是被锁进三样东西里：**价格、版面、图片格式**。
+前两条是钱包的问题，第三条是技术问题——而技术问题恰好是这一整个仓库在解决的。
+
+大模型把这一步变得紧急：今天人类写下的数学，有相当一部分以**扫描页**的形式存在，
+对任何语料都是隐形的。它进不了 tokenizer，进不了检索，进不了证明检查器。
+一个读遍人类数学的模型不能建立在 JPEG 之上——**这不是立场，是数据问题**。
+
+所以这条管线的产物严格来说不是"电子书"，是**语料**：
+
+| | |
+|---|---|
+| **128,532** 条公式（全库） | LaTeX 源码，不是裁图；`\int` 能 `grep`，能被全文索引 |
+| **~99.93%** L0 门禁干净率 | KaTeX 是免费且不留情面的裁判：语法不过就是不过 |
+| **23,207** 页（123 本已入库） | 带 `bbox` 与页码，能回溯原书版面，可核对可引用 |
+| **447 本 / 183,046 页**（候选库） | 还排着 324 本，约 66 小时机时 |
+
+而这件事是一个人、一台 Windows 机器、四个免费额度的 key 做完的：现金成本 **0**，
+瓶颈只有各家的日请求额度。这个事实比任何口号都重要——**它意味着这不需要授权、不需要经费、
+不需要等机构醒过来**。一本 300 页的书，净速率 5.87 秒/页，不到半小时机时就从"扫描件"
+变成"文本"；并发跑起来更短。任何人都跑得起。
+我只跑了我那一份，候选库里还有 324 本在等着；你书架上那本，也不该继续是图片。
+
+我不认为知识应该按钱包分配，也不认为 1998 年的那套规则该原样管住 2026 年的机器能读什么。
+这是政治判断，不是技术结论，所以我把它写在技术文档里。
+本仓库不托管、不分发任何书或成品：这里只有代码——把 PDF 变成机器读得懂的书的那部分代码。
+
 ## 归属与许可
 
 **MIT**（[`LICENSE`](LICENSE)），与上游一致；我**不**对上游代码主张任何额外权利。
@@ -182,8 +214,9 @@ crash-on-every-launch when a book was deleted outside the app.
 Upstream is [chmouel/liseur](https://github.com/chmouel/liseur) by Chmouel Boudjnah, MIT licensed;
 all base functionality is his. The companion pipeline that converts STEM PDFs into these EPUBs is
 documented in [`docs/stem-pdf-to-epub.zh-CN.md`](docs/stem-pdf-to-epub.zh-CN.md) (Chinese):
-123 books / 23,207 pages converted so far, formula quality checked by a three-tier gate that runs
-entirely on free API quotas — no cash spent. **Convert your PDFs.** A formula that became an image
-is a book that can no longer search itself.
+128,532 formulae as LaTeX rather than images, 23,207 pages converted so far, three-tier quality
+gate, all of it on free API quotas and no cash spent. The point is not a nicer ebook — it is that
+a scanned page cannot be indexed, searched, or trained on, and a text page can. **Convert your
+PDFs.** A formula that became an image is a book that can no longer search itself.
 
 </details>
