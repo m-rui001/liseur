@@ -9,8 +9,8 @@
 
 <p align="center">
   开源 Android EPUB 阅读器 · 公式是真公式 · 离线可用 · 无广告无追踪 · MIT<br>
-  <b>目标：让 STEM 书变成机器读得懂的文本，而不是一摞扫描页。</b><br>
-  <sub>因为一个读遍人类数学的模型，不可能建立在 JPEG 之上。</sub>
+  <b>目标：把 STEM 书变成机器读得懂的文本。</b><br>
+  <sub>扫描页里的数学，人和模型都检索不到。这个仓库管两端：把书转成文本，和在手机上把它读好。</sub>
 </p>
 
 ---
@@ -21,7 +21,7 @@ PDF 是为 A4 排的：放大以后一行只看得进五个字，重排以后公
 想跳到第 120 页得先划三十下。于是很多人退回去看公式截图——可一张 `\int` 的截图既不能搜索、
 不能复制、不能重排，放大就糊，还会把一本书变成几百张图片的压缩包。
 
-Liseur 走另一条路：**书是 EPUB，公式是正文里的 LaTeX 源码，渲染器跟着 App 一起装进手机。**
+Liseur 走另一条路：书是 EPUB，公式是正文里的 LaTeX 源码，渲染器跟着 App 一起装进手机。
 
 ## 为什么 EPUB 而不是 PDF
 
@@ -35,20 +35,20 @@ Liseur 走另一条路：**书是 EPUB，公式是正文里的 LaTeX 源码，�
 | 亮度 / 行距 / 边距 | 没有 | 按全书或按单本调 |
 | 自动续读 | 无 | 按设定速度滚动，跨章节连续 |
 
-一本 300 页的书，EPUB 加字体大约几 MB；同样的内容把公式切成图片常常上百 MB，
-而且从那刻起，这本书**再也搜不到自己**。
+一本 300 页的书，EPUB 加字体大约几 MB；同样的内容把公式切成图片常常上百 MB，而且从那刻起，
+这本书就再也搜不到自己了。
 
 ## 这个 App 为 STEM 做的事
 
-- **公式排出来，不是显示出来。** [KaTeX](https://katex.org)（Knuth TeX 血统的排版器）打包在
-  App 里，通过阅读器自己的资源服务器注入书页。**不联网**——地铁、飞机、山里都能读；
-  **不新增依赖**，App 仍然可以离线构建、仍然符合 F-Droid。
-- **比页宽的公式可以拖着看。** 一个显示公式是不可折行的一行，而手机栏宽只有 40 个字符左右——
-  几乎每一个有价值的公式都比它所在的那页宽。横向按住公式拖动，**移动的是公式，不是整页**，
+- **公式是排出来的。** [KaTeX](https://katex.org)（Knuth TeX 血统的排版器）打包在 App 里，
+  通过阅读器自己的资源服务器注入书页。所以它不联网——地铁、飞机、山里都能读——也不新增依赖，
+  App 照样离线构建，照样符合 F-Droid。
+- **比页宽的公式可以拖着看。** 一个显示公式是不可折行的一行，而手机栏宽只有 40 个字符左右，
+  于是几乎每一个有价值的公式都比它所在的那页宽。横向按住公式拖动，移动的是公式本身，
   翻页和滚动两种阅读模式行为一致。
-- **它不是一个开关。** 排版和脚注、表格属于同一类"修复"：不知道"LaTeX"这个词的读者
-  不该为了读数学书去找一个设置项；知道的也不该因为某个开关关着，在一本书里丢掉全部公式。
-- **`\(x\)` 降级也可读。** 用别的软件打开同一本书，看到的是可读的 LaTeX 源码，不是空白或乱码。
+- 没有开关。排版跟脚注、表格是同一类"修复"：没听说过 LaTeX 的读者不该为了读数学书去翻设置，
+  听说过的也不该因为某个开关关着，就在一本书里丢掉全部公式。
+- 降级也可读。用别的软件打开同一本书，看到的是 `\(x\)`，一段能读的源码。
 - 划词高亮（三色可选）、页边注、书签、站内字典、脚注卡片、目录、进度统计、
   笔记与批注跨设备同步——这些来自上游，见下文。
 
@@ -59,28 +59,32 @@ Liseur 走另一条路：**书是 EPUB，公式是正文里的 LaTeX 源码，�
 
 ## 另一半：把你的 PDF 变成这种书
 
-能画公式的阅读器只解决了一半——**书里得先有 LaTeX**。这不是常见做法：现成的 PDF→EPUB 工具
-几乎都输出 MathML，而 MathML 在 EPUB 里的支持薄到 pdf-craft 自己在文档里都不背书
-（Kindle 全系不支持，Apple Books 会忽略 `mrow`，微信读书直接忽略）。
+能画公式的阅读器只解决了一半，书里得先有 LaTeX。这一步很少人做。现成的 PDF→EPUB 工具几乎
+都往 MathML 走，而 MathML 在 EPUB 里的支持薄到 pdf-craft 自己在文档里都不背书：Kindle 全系
+不认，Apple Books 会忽略 `mrow`，微信读书整段跳过。
 
-我的选择是把公式**以 LaTeX 源码留在正文流里**：更简洁、可 `grep`、可全文检索，
-而且今天最要紧的一条——**LLM 读 LaTeX 是母语，读 MathML 是在啃标签树**。
-死结在于"EPUB 的质量上限由阅读器决定"，所以把渲染这一半拿回自己手里。
+我选了另一条看起来更笨的路——公式以 LaTeX 源码留在正文流里。它短，它能 `grep`，能被全文
+索引；LLM 读 LaTeX 是母语，读 MathML 是在啃标签树。还有一个理由更现实：EPUB 最终排到什么
+质量，本来由阅读器说了算，把渲染搬进 App，这部分主动权就回到读书的人手里了。
 
-为此我建了一条管线：扫描版/数字版 STEM PDF → OCR → **LaTeX + bbox + 图片哈希的中间归档** →
-EPUB3 / `.tex` / Markdown，配**三层质检**（本地确定性检查 + 文本模型主筛 + 视觉模型修正）。
-全程跑在免费额度上——DeepSeek-OCR、Z.ai 的免费 flash 模型、MinerU 免费档、Google AI Studio
-免费模型，**现金成本 0**，真正的预算是每天的请求额度。目前跑通 **123 本 / 23,207 页**
-（Tao《Analysis II》、《Topological Picturebook》、《数值分析》……）。
+管线大致是：扫描版或数字版 STEM PDF 先过 OCR，落成一个装着 LaTeX、`bbox` 和图片哈希的中间
+归档，再从同一份归档出 EPUB3、`.tex` 和 Markdown——改排版参数不用重跑 OCR。质检有三层：
+本地确定性检查打底（最强的一项是把每条公式无头编译一遍），文本模型做主筛，视觉模型专治那些
+被切成图片的公式。
 
-完整记录、判据、实测数字和可复现命令：
-**[`docs/stem-pdf-to-epub.zh-CN.md`](docs/stem-pdf-to-epub.zh-CN.md)**。
+模型全部来自免费额度：OCR 是硅基流动的 DeepSeek-OCR，主筛和视觉修复用 Z.ai 的免费 flash 模型
+和 Google AI Studio 的免费模型，第二套抽取引擎 MinerU 走它 2000 页/天的免费档。所以现金成本
+是 0，要算计的只有每天的请求额度。目前跑通 123 本 / 23,207 页，里面有 Tao《Analysis II》、
+《Topological Picturebook》、《数值分析》。
 
-> **把你手边的 PDF 转成 EPUB，今晚就能开始。** 公式一旦退化成图片，这本书就再也搜不到自己了：
-> 它从"可检索的知识"掉回"一摞扫描页"，每个人得重新读一遍，每一个模型都读不到。
-> 而代价低到没有借口——一本 300 页的书，几个小时机时、**0 元现金**，换回来的是一段能查、
-> 能引、能喂给机器、能在格式更迭之后活下来的文本。
-> **一个人跑是一份，十个人跑是十份。这批书不会因为等谁而变短。**
+搭这条流水线用的是 Workbuddy 的免费额度，改 Liseur 用的是 Qoder 的免费额度，我一行代码没手写。
+
+完整记录——判据、实测数字、Windows 上那几个坑、可复现命令——写在
+[`docs/stem-pdf-to-epub.zh-CN.md`](docs/stem-pdf-to-epub.zh-CN.md) 里。
+
+> 如果你手边正好有一本只剩扫描 PDF 的书，转掉它。公式一旦退化成图片，这本书就再也搜不到
+> 自己了：每个人得重新读一遍，每个模型都读不到。三百页的活儿挂一个晚上就完，不花钱。
+> 这批书不会因为有谁在等它们就变短。
 
 ## 界面
 
@@ -156,85 +160,71 @@ make check                       # 测试 + lint + debug 构建
 
 ## 为什么要做这件事
 
-**这不只是为了我读书舒服。**
+这不只是为了我读书舒服。
 
-一本实变函数，作者写三四年，拿走零售价的 8~12%；定价权在出版方手里，同一本书加密的电子版
-常常比纸质还贵。知识被生产出来之后，第一件事是被锁进三样东西里：**价格、版面、图片格式**。
-前两条是钱包的问题，第三条是技术问题——而技术问题恰好是这一整个仓库在解决的。
+一本实变函数，作者写三四年，拿走零售价的 8~12%，定价权还在出版方手里；同一本书加密的电子版
+常常比纸质的还贵。知识生产出来以后，头一件事是被锁进三处：价格、版面、图片格式。前两条是
+钱包的问题，第三条是技术问题，而技术这条恰好是整个仓库在管的。
 
-### 大模型把这件事变成了紧急的事
+### 大模型把这件事变得很急
 
-今天人类写下的数学，有相当一部分以**扫描页**的形式存在。它对任何语料都是隐形的：进不了
-tokenizer，进不了检索，进不了证明检查器。于是"一个读遍人类数学的模型"这句话里，人类数学
-其实是**按付费墙和扫描质量抽样**的——新一点的英文教材清晰，越老、越难、越是母语不是英语的
-书越是空白，而恰好是那些书里存着最难的东西。
+人类今天写下的数学，相当一部分还躺在扫描页里。它进不了 tokenizer，进不了检索，进不了证明
+检查器。于是所谓"读遍人类数学的模型"，读到的其实是一份按付费墙和扫描质量抽出来的样：新一点
+的英文教材清楚，越老、越难、母语不是英语的那些越是空白，而那堆里面偏偏存着最难的东西。
+JPEG 上盖不起这样的模型——这是数据问题，跟立场没关系。
 
-**一个模型不可能建立在 JPEG 之上。这不是立场，是数据问题。**
+再往下说更要紧。通用智能如果被跨过，它读过什么，就会决定以后所有人怎么被回答，而这件事不该
+由几家公司的路线图来定。它们的路线图里不会有"把一本 1987 年的中文实变函数变成能 `grep` 的
+文本"这一条，不可能有：没人为了这一条付钱，也没人因为缺这一条流失用户。
 
-更要紧的是：如果通用智能真的被跨过，**它读到过什么，就会决定此后所有人怎么被回答**。
-决定这件事的不该是几家上市公司的路线图。它们的路线图里不会有"把一本 1987 年的中文实变函数
-变成可 `grep` 的文本"这一条——**不可能有**，因为没有人向它们收费要求这一条，也没有人因为
-少了这一条而流失用户。
+所以开源模型那条路得有人走，把最强的东西做到人人买得起、查得到、改得动。我在更下游，做的事
+土得多——把书变成文本。模型每回答一次"一致收敛怎么定义"，背后总得有人先把写着这句话的那本
+书从像素里捞出来。两头少任何一头，"最前沿的智能应该开放、廉价地供应给所有人"就是一句宣传。
 
-所以开源模型那条路必须有人走：把最强的智能做得人人买得起、查得到、改得动，就是在往回收。
-而我做的事在更下游，也更土——**把书变成文本**。模型每答一次"一致收敛怎么定义"，背后都得
-有人先把写着这句话的那本书从像素里捞出来。上游要有人做开源模型，下游要有人做开源语料，
-**少了哪一头，"最前沿的智能应该开放、廉价地供应给所有人"就只是一句宣传。**
+### 这些产物其实不是电子书
 
-我不指望别人替我们搬这批书。所以我搬我够得着的那一部分，并且把怎么搬的全部写在这里，
-让够得着别人那一部分的人不必从零试错。
+全库 128,532 条公式是 LaTeX 源码，`\int` 能被 `grep`，能被全文索引。L0 门禁的干净率约
+99.93%，因为 KaTeX 是个免费且不留情面的裁判，语法不过就是不过。已入库的 23,207 页都带着
+`bbox` 和页码，任何一句都能翻回原书的那一版去核对——可核对才可引用，这才是它跟"一份 AI 摘要"
+的区别。候选库里一共 447 本、183,046 页，还剩 324 本在排队，约 66 小时机时。
 
-### 这条管线的产物严格来说不是"电子书"，是语料
+这些是一个人、一台 Windows 机器、四个免费额度的 key 跑出来的。一本三百页的书，净速率 5.87
+秒一页，纯机时不到半小时，把排队和重跑算上，挂一晚也就完了。谁都能跑。
 
-| | |
-|---|---|
-| **128,532** 条公式（全库） | LaTeX 源码，不是裁图；`\int` 能 `grep`，能被全文索引 |
-| **~99.93%** L0 门禁干净率 | KaTeX 是免费且不留情面的裁判：语法不过就是不过 |
-| **23,207** 页（123 本已入库） | 带 `bbox` 与页码，能回溯原书版面，可核对可引用 |
-| **447 本 / 183,046 页**（候选库） | 还排着 324 本，约 66 小时机时 |
-
-而这件事是一个人、一台 Windows 机器、四个免费额度的 key 做完的：现金成本 **0**，瓶颈只有
-各家的日请求额度。**这个事实比任何口号都重要**——它意味着这不需要授权、不需要经费、
-不需要等机构醒过来，也不需要谁的许可。一本 300 页的书，净速率 5.87 秒/页：纯机时不到半小时，
-算上排队和重跑挂一晚也就完了，并发起来更短。**任何人都跑得起。**
-
-我只跑完了我那一份。候选库里还有 324 本在排队；你书架上那本，也不该继续是图片。
+还有一件事我本来会写在脚注里：这条流水线是用 Workbuddy 的免费额度搭起来的，Liseur 上面那些
+改动是用 Qoder 的免费额度改的。一分钱没花，也没有手写一行代码。这话在某些场合近乎自贬，我
+的看法正相反——门槛低到这个地步，它就不该再被当成门槛。剩下的问题只有一个：那 324 本谁去跑。
 
 ### 一本书不等于它版权登记在谁名下
 
-版税买的是印刷、发行和书名页上那个名字的位置，**买不到内容本身**。一本实变函数里的积分号
-不是哪家出版社发明的：它是两百年间几百个人写下、改过、纠错、重新解释过的东西，最后一个人
-只是把它排成了铅字。**说内容"完全属于"出版方，是把搬运工说成了作者。** 我不接受这个前提，
-所以也不接受从它推出的结论——一份人类写下的数学，只因为它有权利人，就该同时被禁止检索、
-禁止索引、禁止被机器读懂。
+版税买的是印刷、发行，和书名页上那个名字占的位置，内容本身不在交易里。实变函数里那个积分号
+不是哪家出版社发明的，它是两百年间几百个人写下、改过、纠错、重新解释过的东西，最后一个人
+只是把它排成了铅字。把搬运工叫作作者，这套说法就站不住了：凭什么一份人类写下的数学，仅仅
+因为它有权利人，就同时禁止被检索、被索引、被机器读懂。
 
 ### 转格式本身就是在保存
 
-这可能是最被低估的一件事：**扫描件是易碎的。**
+扫描件比想象中易碎。同样一本三百页的书，扫描 PDF 动辄几百 MB，每页一张图；转出来的 EPUB
+加 LaTeX 只要几百 KB 到几 MB，差两三个数量级。前者改不了——版面就是像素，改一处要重做整页；
+后者是文本、公式源码和结构，谁都能修。至于十年后还打不打得开，扫描件要赌某个阅读器还认得
+那套编码，文本只要赌 UTF-8 和 LaTeX 还活着，这基本不用赌。存一千本扫描要 TB 级，存一千本
+文本几 GB，一个同步盘就装得下。能被复制很多份的东西活得久，能被编辑的东西才谈得上被修正和
+续写：一张扫描页坏了就是坏了，一行 LaTeX 写错了，会有一个我从来没见过的人把它改对，然后
+往后所有人读到的都是改对的那一版。
 
-| | 扫描版 PDF | 转出来的 EPUB / LaTeX |
-|---|---|---|
-| 一本 300 页的书 | 几百 MB（每页一张图） | 几百 KB 到几 MB（两三个数量级） |
-| 能不能改 | 不能。版面即像素，改一处要重做整页 | 能。文本、公式源码、结构都可编辑 |
-| 十年后还能读吗 | 赌某个阅读器还认这套编码 | 赌 UTF-8 和 LaTeX 还活着——这不用赌 |
-| 灾备成本 | 存 1000 本要 TB 级存储 | 同样 1000 本几 GB，一份同步盘装下 |
-
-**体积越小，就能被复制越多次、存得越久；能被编辑的，才谈得上被修正和续写。** 一张扫描页
-坏了就是坏了；一行 LaTeX 错了，可以有一个陌生人把它改对，然后所有人都读到对的那一版。
-把书从像素里搬出来，不是为了在手机上看清楚一点——是为了让人类文明的星火在格式更迭、
-纸张酸化、硬盘消磁、出版社清掉某个域名之后，**还有下半段命**。
+把书从像素里搬出来，不是为了在手机上看得清楚一点。是为了让它们在格式更迭、纸张酸化、硬盘
+消磁、某家出版社悄悄清掉一个域名之后，还有下半段命。
 
 ### 这只是开头
 
-123 本已经入库，324 本还在排队，机时不等人。把 PDF 变成语料的那套东西还在长：更多的书、
-一个可验证的数学语料层（公式结构 + 编译判据 + 页码指纹，不含任何书本文字），以及现在还不
-方便写在这上面的那几步。**方向只有一个：让写下来的东西被读得懂——包括被机器读懂。**
+123 本进了库，324 本在排队，机时不等人。这套东西还要往几个方向长：一个可验证的数学语料层
+（只有公式结构、编译判据和页码指纹，不含任何书本文字），更多的书，以及现在还不方便写在这里
+的几步。
 
-我不认为知识应该按钱包分配，也不认为 1998 年的那套规则该原样管住 2026 年的机器能读什么。
-这是政治判断，不是技术结论，所以我把它写在技术文档里，不藏在脚注里。
+我不认为知识应该按钱包分配，也不认为 1998 年那套规则该原样管住 2026 年的机器能读什么。这是
+政治判断，不是技术结论，所以我把它写在技术文档里，不藏进脚注。
 
-本仓库不托管、不分发任何书或成品：这里只有代码——把 PDF 变成机器读得懂的书的那部分代码。
-想接着往下做的人，代码都在这里。
+本仓库不托管、不分发任何书或成品。这里只有代码：把 PDF 变成机器读得懂的书的那部分代码。
 
 ## 归属与许可
 
@@ -254,30 +244,25 @@ tokenizer，进不了检索，进不了证明检查器。于是"一个读遍人�
 <details>
 <summary>English (short version)</summary>
 
-An open-source Android EPUB reader that renders the mathematics a book wrote in TeX — offline,
-with KaTeX bundled in the app, no new dependency, still F-Droid-compatible — and lets you drag a
-formula that is wider than the page sideways instead of turning the page or sliding the whole
-book out from under your thumb.
+An open-source Android EPUB reader that typesets the mathematics a book wrote in TeX. KaTeX ships
+inside the app, so it works offline and adds no dependency; it stays F-Droid-compatible. A formula
+wider than the page drags sideways instead of turning the page out from under your thumb.
 
-Formulas live in the book as **LaTeX source, inline in the text flow**, not as images and not as
-MathML: they stay searchable, copyable, reflowable, and readable by an LLM. This fork is based on
-upstream **v0.18.0** with full history preserved, and also fixes local-network detection on
-mobile data (#241), the page-curl animation revealing a page that had not arrived, and a
-crash-on-every-launch when a book was deleted outside the app.
+Formulae are LaTeX source sitting in the text flow — no images, no MathML — so they stay
+searchable, copyable, reflowable, and readable by an LLM. Forked from upstream v0.18.0 with the
+history intact; also fixes on-link detection on mobile data (#241), a page-curl that showed a page
+that had not loaded, and a crash every launch after a book was deleted outside the app. All the
+base functionality is Chmouel Boudjnah's ([chmouel/liseur](https://github.com/chmouel/liseur), MIT).
 
-Upstream is [chmouel/liseur](https://github.com/chmouel/liseur) by Chmouel Boudjnah, MIT licensed;
-all base functionality is his. The companion pipeline that converts STEM PDFs into these EPUBs is
-documented in [`docs/stem-pdf-to-epub.zh-CN.md`](docs/stem-pdf-to-epub.zh-CN.md) (Chinese):
-128,532 formulae as LaTeX rather than images, 23,207 pages converted so far, three-tier quality
-gate, all of it on free API quotas and no cash spent. The point is not a nicer ebook — it is that
-a scanned page cannot be indexed, searched, or trained on, and a text page can. Nor is a book
-simply what its rights holder says it is: the mathematics inside it was written by hundreds of
-people over two centuries, and the publisher set it in type. **Conversion is itself preservation**
-— a few hundred kilobytes of editable text survives duplication, format churn and disk failure
-where hundreds of megabytes of page scans do not. And if frontier intelligence is going to be open
-and cheap for everyone, someone has to supply the corpus underneath it, because a closed lab's
-roadmap will never contain "make a 1987 Chinese textbook on real analysis greppable".
-**Convert your PDFs.** A formula that became an image is a book that can no longer search itself.
-This is the beginning, not the end.
+The companion pipeline that turns STEM PDFs into these books is written up in
+[`docs/stem-pdf-to-epub.zh-CN.md`](docs/stem-pdf-to-epub.zh-CN.md) (Chinese): 128,532 formulae as
+LaTeX, 23,207 pages converted, a three-tier quality gate. Every cent of it came from free quotas —
+DeepSeek-OCR, Z.ai, MinerU, Google AI Studio — and the build work itself ran on free agent quotas
+too: the pipeline was assembled with Workbuddy, this fork's changes with Qoder, and not one line
+of that code was hand-written. Zero spend, start to finish.
+
+What it is for: a scanned page cannot be indexed, searched, or trained on, and 128,532 formulae
+still are one. Nobody behind a paywall is going to fix that, and no closed lab's roadmap contains
+a line for an old Chinese real-analysis book. 324 volumes are still queued. Convert yours.
 
 </details>
