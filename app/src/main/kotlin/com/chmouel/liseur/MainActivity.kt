@@ -44,7 +44,9 @@ import com.chmouel.liseur.data.library.Inspection
 import com.chmouel.liseur.domain.ResumeCandidate
 import com.chmouel.liseur.domain.shouldResume
 import com.chmouel.liseur.reader.ReaderActivity
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.saveable.listSaver
 import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.localeWeekStart
@@ -157,6 +159,15 @@ class MainActivity : ComponentActivity() {
             )
         }
         if (!shouldResume(candidate, leftFromReader) || candidate == null) return
+        // A book whose file was deleted outside the app — from a file
+        // manager, or moved — is not a book to drop the reader into. The
+        // row still names the reading, so the library can still show the
+        // book, but resuming it lands the reader in a reader that cannot
+        // open anything. Asked of the provider first, off the main thread:
+        // for a local file this is a `File.canRead`, for a Storage
+        // Framework tree it is a document the provider either answers for
+        // or does not.
+        if (!withContext(Dispatchers.IO) { this@MainActivity.uriIsReadable(candidate.fileUrl) }) return
         // No animation: as far as the reader is concerned the app simply
         // opened on their book, and a cross-fade from a library they never
         // asked for would give the game away.
@@ -165,6 +176,27 @@ class MainActivity : ComponentActivity() {
             ActivityOptions.makeCustomAnimation(this, 0, 0).toBundle(),
         )
     }
+}
+
+/**
+ * Whether the bytes behind this URI can still be opened for reading.
+ *
+ * A `file:` path is answered by the file itself; anything else is a
+ * Storage Framework document, which the provider answers for — a deleted
+ * document, or one whose persistable permission was revoked, comes back
+ * as a failure rather than as a handle. Only the handle is asked for,
+ * never its contents: this is about whether the door opens.
+ */
+private fun Context.uriIsReadable(uri: String): Boolean {
+    val parsed = Uri.parse(uri)
+    if (parsed.scheme == "file") return java.io.File(parsed.path.orEmpty()).canRead()
+    // Opening and closing the handle is the whole question; a deleted
+    // document or a revoked permission refuses it. A provider that
+    // serves the document only as a stream says so through a subtype
+    // the file-descriptor call throws on, so the stream is tried too.
+    return runCatching { contentResolver.openFileDescriptor(parsed, "r")?.close() }
+        .recoverCatching { contentResolver.openInputStream(parsed)?.close() }
+        .isSuccess
 }
 
 private enum class Screen {

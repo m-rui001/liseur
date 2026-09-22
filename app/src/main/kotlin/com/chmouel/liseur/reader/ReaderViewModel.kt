@@ -84,6 +84,7 @@ import com.chmouel.liseur.reader.progress.StableBookProgress
 import com.chmouel.liseur.reader.progress.namesItsPage
 import com.chmouel.liseur.reader.progress.samePage
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -912,7 +913,21 @@ class ReaderViewModel(
     }
 
     private fun open() {
-        viewModelScope.launch {
+        // An exception that escapes this coroutine would kill the process
+        // before any state is published, and the app opens the same book on
+        // every launch — so a book whose file went missing outside the app
+        // (deleted from a file manager, a storage permission quietly lost)
+        // turned every later start into the same crash. Anything the
+        // Either-returning steps above did not already answer is reported
+        // the way a failed open is always reported: a screen the reader can
+        // go back from.
+        viewModelScope.launch(
+            CoroutineExceptionHandler { _, e ->
+                if (e !is CancellationException) {
+                    _state.value = UiState.Failure(e.message ?: e.javaClass.simpleName)
+                }
+            }
+        ) {
             // Make sure saved preferences are loaded before the navigator is
             // created, so the book opens directly with the user's settings.
             prefsRepo.prefs.first()
