@@ -1,13 +1,17 @@
-# Liseur（中文）
+# 本仓库相对上游的改动（技术说明）
 
+> 面向想读代码的人。仓库的门面介绍见 [`README.md`](../README.md)；
+> 配套的书稿转换管线见 [`stem-pdf-to-epub.zh-CN.md`](stem-pdf-to-epub.zh-CN.md)；
+> 更细的架构与协议约定见 [`DEVELOPER.md`](../DEVELOPER.md)。
+>
 > 本仓库是 [chmouel/liseur](https://github.com/chmouel/liseur) 的一个分支，基于上游 **v0.18.0**
 > （提交 `b00ee78`）。上游的提交历史完整保留，因此 GitHub 上的 **Compare / Files changed**
-> 能直接看出本仓库改了什么。原作者是 [Chmouel Boudjnah](https://github.com/chmouel)，
-> 许可证仍是 MIT，我不对上游代码主张任何额外权利。
+> 能直接看出本仓库改了什么；上游的英文原版说明存档在
+> [`UPSTREAM-README.en.md`](UPSTREAM-README.en.md)。原作者是
+> [Chmouel Boudjnah](https://github.com/chmouel)，许可证仍是 MIT，
+> 我不对上游代码主张任何额外权利。
 >
-> 上游英文说明见 [`README.md`](README.md)，详细的架构与协议文档见
-> [`DEVELOPER.md`](DEVELOPER.md)。本文只讲**我在原作者基础上做了哪些改动、为什么做、
-> 解决了什么问题**。
+> 本文只讲**我在原作者基础上做了哪些改动、为什么做、解决了什么问题**。
 
 ## 改动一览
 
@@ -23,7 +27,9 @@
 
 ## 1. 数学公式：把 LaTeX 排回书页里，并让它能拖动
 
-**ADR 见 [`docs/adr/0037-katex-mathematics-and-a-dragged-formula.md`](docs/adr/0037-katex-mathematics-and-a-dragged-formula.md)。**
+**ADR 见 [`adr/0037-katex-mathematics-and-a-dragged-formula.md`](adr/0037-katex-mathematics-and-a-dragged-formula.md)。**
+**为什么书里放的是 LaTeX 源码而不是 MathML**，见
+[`stem-pdf-to-epub.zh-CN.md`](stem-pdf-to-epub.zh-CN.md) 第二节。
 
 ### 问题
 
@@ -157,7 +163,7 @@
 
 ## 2. 蜂窝网络下连不上任何服务器：局域网判定读错了东西
 
-**ADR 更正见 [`docs/adr/0028-local-network-permission.md`](docs/adr/0028-local-network-permission.md)。**
+**ADR 更正见 [`adr/0028-local-network-permission.md`](adr/0028-local-network-permission.md)。**
 
 ### 问题
 
@@ -199,7 +205,7 @@ Android 的新版本引入了本地网络权限：拨一个局域网地址之前
 
 ## 3. 翻页卷曲动画揭开了读者还没离开的页
 
-**ADR 更正见 [`docs/adr/0025-page-turn-styles.md`](docs/adr/0025-page-turn-styles.md) 末段。**
+**ADR 更正见 [`adr/0025-page-turn-styles.md`](adr/0025-page-turn-styles.md) 末段。**
 
 ### 问题
 
@@ -262,7 +268,7 @@ Literata，等于默认改写出版社的排版选择；对**从来没进过设�
 
 ## 构建与验证
 
-命令和项目一致（详见 [`DEVELOPER.md`](DEVELOPER.md)）：
+命令和项目一致（详见 [`DEVELOPER.md`](../DEVELOPER.md)）：
 
 ```bash
 ./gradlew testDebugUnitTest
@@ -277,6 +283,6 @@ make check          # 跨测试 / lint / debug 构建时
 
 ## 许可
 
-[MIT](LICENSE)，与上游一致。捆绑的字体为 SIL OFL；KaTeX 为 MIT（Copyright (c) 2013-2020
+[MIT](../LICENSE)，与上游一致。捆绑的字体为 SIL OFL；KaTeX 为 MIT（Copyright (c) 2013-2020
 Khan Academy and other contributors），已列在应用内设置 → 开源许可。
 上游代码的著作权属于 Chmouel Boudjnah 及其贡献者，本仓库不主张任何额外权利。
