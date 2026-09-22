@@ -11,6 +11,14 @@
 </p>
 
 
+> **Fork note.** This repository is a fork of [chmouel/liseur](https://github.com/chmouel/liseur)
+> based on upstream **v0.18.0**, keeping the original MIT licence and full upstream history.
+> It adds offline KaTeX mathematics typesetting with draggable wide formulas, fixes local-network
+> detection on mobile data (#241), fixes the page-curl reveal timing, and makes a book deleted
+> outside the app recoverable instead of crash-looping. Everything is described in
+> [`README.zh-CN.md`](README.zh-CN.md) (Chinese). Upstream documentation continues below.
+
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.png">
