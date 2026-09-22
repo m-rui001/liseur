@@ -260,7 +260,10 @@ fun epubNavigatorConfiguration(
     onSelectionCleared: () -> Unit = {},
 ): EpubNavigatorFragment.Configuration =
     EpubNavigatorFragment.Configuration {
-        servedAssets = listOf("fonts/.*")
+        // The reading fonts, and the bundled mathematics library —
+        // `MathTypesetting` reaches the latter as `https://readium_assets/`,
+        // which only answers for paths listed here.
+        servedAssets = listOf("fonts/.*", "katex/.*")
         disablePageTurnsWhileScrolling = scroll
         readiumCssRsProperties = readingRsProperties(columnMode)
         selectionActionModeCallback = object : ActionMode.Callback {

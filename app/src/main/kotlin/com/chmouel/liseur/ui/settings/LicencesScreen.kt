@@ -121,6 +121,13 @@ private val Components = listOf(
         licenceAsset = "licences/ia-writer-duospace.txt",
     ),
     Component(
+        name = "KaTeX",
+        licence = "MIT",
+        notice = "Copyright (c) 2013-2020 Khan Academy and other contributors\n" +
+            "github.com/KaTeX/KaTeX",
+        licenceAsset = "licences/katex.txt",
+    ),
+    Component(
         name = "calibre-web logo",
         licence = "GPL-3.0-or-later",
         notice = "Copyright (c) The calibre-web contributors\n" +
