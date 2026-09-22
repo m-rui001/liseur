@@ -18,7 +18,7 @@ enum class ReaderFont(val id: String, val displayName: String, val cssName: Stri
     ;
 
     companion object {
-        val Default = LITERATA
+        val Default = PUBLISHER
 
         fun fromId(id: String?): ReaderFont = entries.firstOrNull { it.id == id } ?: Default
     }
