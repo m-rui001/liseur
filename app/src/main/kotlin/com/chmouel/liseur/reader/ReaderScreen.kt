@@ -29,7 +29,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -146,6 +145,7 @@ import com.chmouel.liseur.reader.chrome.JumpBackPill
 import com.chmouel.liseur.reader.chrome.PageCurl
 import com.chmouel.liseur.reader.chrome.PageCurlOverlay
 import com.chmouel.liseur.reader.chrome.PageCurlState
+import com.chmouel.liseur.reader.ImageAtPoint
 import com.chmouel.liseur.reader.chrome.PageTurnDrag
 import com.chmouel.liseur.reader.chrome.PageTurnEffectState
 import com.chmouel.liseur.reader.chrome.PageTurnOverlay
@@ -160,7 +160,6 @@ import com.chmouel.liseur.reader.chrome.visibleWebViewCache
 import com.chmouel.liseur.reader.chrome.CachedLookup
 import com.chmouel.liseur.reader.chrome.layoutPasses
 import com.chmouel.liseur.reader.chrome.ChromeEdgeFade
-import com.chmouel.liseur.reader.chrome.ReadingScrubber
 import com.chmouel.liseur.reader.chrome.ContentsScreen
 import com.chmouel.liseur.reader.chrome.Endpaper
 import com.chmouel.liseur.reader.chrome.FixedLayoutPinchHud
@@ -258,6 +257,16 @@ private const val CHAPTER_ARRIVAL_MS = 5_000L
 // applying even when the position it would restore never arrives.
 private const val ANCHOR_ARRIVAL_MS = 2_000L
 
+// How long a dragged curl waits, lying flat, for the page underneath to
+// become the one the reader turned to before it reveals it. Readium
+// republishes its position about a tenth of a second after the columns
+// have actually scrolled, so the curl can be held to that rather than to
+// a guess of a few frames. Bounded, because a turn that never publishes
+// (a drag onto a boundary that does not move, say) must still reveal the
+// page it is standing on after the old fixed-frame wait would have — the
+// timeout is the previous behaviour, and no worse.
+private const val CURL_ARRIVAL_MS = 400L
+
 // The look the last lines of a chapter get before the page moves on,
 // however fast or slow the reader has it set.
 private const val MIN_CHAPTER_DWELL_MS = 400L
@@ -281,6 +290,13 @@ private const val AUTO_SCROLL_SAVE_NANOS = 2_000_000_000L
  * moving is worse than getting it wrong.
  */
 private const val DECIDE_BUDGET_MS = 250L
+
+/**
+ * How long a sideways drag is held while the page works out what is under
+ * the finger. Below the point where a reader would call it a lag, and long
+ * enough for one question to a web view that is already awake.
+ */
+private const val PAN_HOLD_MS = 120L
 
 /** How often the long press looks to see whether the answer has landed. */
 private const val ANSWER_POLL_MS = 20L
@@ -541,6 +557,8 @@ fun ReaderScreen(
     val fontSizeNow by rememberUpdatedState(prefs.fontSize)
     val setFontSizeNow by rememberUpdatedState(onPrefsAction.setFontSize)
     val touch = remember { TouchProbe() }
+    // The formula under a finger, for as long as that finger is down.
+    val formulaPan = remember { FormulaPanDrag() }
     var viewedImage by remember { mutableStateOf<ViewedImage?>(null) }
     // True from the moment a picture is claimed to the moment it is on
     // screen. The bytes take a read of an archive entry to arrive, and
@@ -859,12 +877,17 @@ fun ReaderScreen(
     // reader who removed animations never asked to stop.
     val motionRemoved = rememberMotionRemoved()
     val motionRemovedNow by rememberUpdatedState(motionRemoved)
+    // The default LIFT transition photographs the entire WebView before every
+    // turn. On pages being typeset that bitmap capture competes with KaTeX and
+    // produces the exact difference seen when chrome is visible (chrome already
+    // suppresses the lift): turns become immediate. Keep an explicitly chosen
+    // native SLIDE, but make LIFT's default path an instant turn.
     val turnStyle: () -> PageTurnStyle = {
         pageTurnStyleOnScreen(
             chosen = prefsFlow.value.pageTurnStyle,
             eInk = eInkNow,
             motionRemoved = motionRemovedNow,
-        )
+        ).let { if (it == PageTurnStyle.LIFT) PageTurnStyle.NONE else it }
     }
     val pageTurner = remember {
         PageTurner(
@@ -952,6 +975,28 @@ fun ReaderScreen(
                             grabY = grabY - (pageLocation[1] - boxInWindow.y),
                             movesLeft = started.forward != started.rtl,
                             paper = readingThemeNow.background.toArgb(),
+                            // The snapshot lies flat, following the finger,
+                            // until the page underneath is actually the one
+                            // it is standing in for. Readium's turn is script
+                            // on the web view's queue, so `goForward` returning
+                            // — which is when this curl was begun — says
+                            // nothing about the columns having moved; revealing
+                            // now would pull back a sheet onto the page the
+                            // reader never left. Readium republishes its
+                            // position once the columns have scrolled, so the
+                            // position changing from the one at the start of
+                            // the turn is the fact that the page has arrived.
+                            // Bounded, so a turn that never publishes still
+                            // reveals after the wait the fixed-frame hold used
+                            // to impose.
+                            pageReady = {
+                                val nav = navigatorNow
+                                if (nav != null) {
+                                    withTimeoutOrNull(CURL_ARRIVAL_MS) {
+                                        nav.currentLocator.first { it != started.from }
+                                    }
+                                }
+                            },
                         )
                         onReady(true)
                     }
@@ -1461,99 +1506,148 @@ fun ReaderScreen(
     // the same reasons the e-ink block above gives: a position alone misses
     // the page the book opens at, a layout pass alone can miss a resource
     // swapped in without one, and finding the same web view again costs a
-    // reference comparison.
-    LaunchedEffect(navigator, reflowableText) {
+    // The per-resource repair: typeset the maths, fit what is too wide, hide
+    // the notes — and absorb the page movement those repairs cause inside a
+    // reflow scope, so the navigator does not read a re-laid-out page as a
+    // turn the reader never made.
+    // [effectiveScrolling] is a key rather than just a value read in the
+    // loop: the same WebView and href survive a pagination/scroll-mode
+    // preference reflow. A mode switch must start a fresh repair pass;
+    // otherwise the once-per-resource key from the old layout suppresses
+    // it, which leaves every formula raw in the newly scrolled document.
+    LaunchedEffect(navigator, reflowableText, effectiveScrolling) {
         val nav = navigator ?: return@LaunchedEffect
         if (!reflowableText) return@LaunchedEffect
         val root = nav.publicationView
-        var fitted: Pair<WebView, String>? = null
+        var fitted: Triple<WebView, String, Int>? = null
         merge(nav.currentLocator.map { }, layoutPasses(root)).collect {
-            val web = visibleWebView(root) ?: return@collect
-            // Keyed by the resource as well as by the view, for the same
-            // reason the image probe below is: the pager recycles a web
-            // view from one chapter into another, and the same instance
-            // is then a different document with its own notes to hide
-            // and its own pictures to fit.
-            val key = web to nav.currentLocator.value.href.toString()
-            if (key == fitted) return@collect
-            fitted = key
-            // Which position to come back to, decided before the reflow
-            // scope opens: the wait below is not a reflow, and holding
-            // the scope through it would read a page the reader turned
-            // in the meantime as text moving under them.
-            //
-            // The anchor is taken from the navigator rather than from
-            // reflowAnchor: that one belongs to a run of preference
-            // changes in the resource being left, and restoring to it
-            // would carry the reader back out of the one they just
-            // turned into.
-            //
-            // For the same reason it is taken only once the navigator's
-            // position names the resource this web view is showing.
-            // Readium puts a resource on screen before it publishes
-            // having moved to it, so the position on hand can still be
-            // the one the reader left — and restoring to that sends
-            // them back to it, which makes the resource they came from
-            // the newly visible one and starts the whole thing over.
-            // The saved position says nothing about that ping-pong,
-            // because a reflow does not persist, until the next page
-            // turn publishes wherever it came to rest.
-            val here = withTimeoutOrNull(ANCHOR_ARRIVAL_MS) {
-                nav.currentLocator.first {
-                    ResourceAddress.shows(web.url, it.href.toString())
-                }
-            }
-            // Taken here rather than at the top of the run, because
-            // the wait above is itself the arrival of whatever move
-            // brought this resource in: marking before it would refuse
-            // the restore after every chapter turn, which is most of
-            // the times a resource is laid out at all.
-            //
-            // It is still [IssuedMoves.NONE] when the reader is being
-            // sent somewhere within this resource — a contents entry
-            // pointing at a fragment of it — because the position the
-            // wait settled for is the one published as the resource
-            // loaded, not the one they asked for.
-            val since = moves.mark(SystemClock.elapsedRealtime())
-            // Whether the resource this run is for is still the one on
-            // screen, the one the navigator names, and the one the
-            // reader has not since been sent away from. Waiting above
-            // and taking the scope below are both places the reader can
-            // turn a page, and everything after them speaks to the
-            // document in front of them: a capture takes its words from
-            // it, a restore puts the reader back into it. Asked again
-            // rather than assumed, at each point where the answer could
-            // have changed — and asked of the moves issued as well,
-            // because a jump the reader has just made shows in neither
-            // the position nor the views for a moment yet.
-            fun stillFitting(): Boolean =
-                web === visibleWebView(root) &&
-                    ResourceAddress.shows(web.url, nav.currentLocator.value.href.toString()) &&
-                    moves.unchangedSince(since)
-            reflow.within {
-                val anchor = here?.takeIf { stillFitting() }?.let { capture(nav, it) }
-                val before = ExactLocatorAnchor.layoutSignature(nav)
-                if (repairPage(nav)) {
-                    // Settled before the scope closes whether or not
-                    // there is an anchor: the text the fit moved
-                    // reports where it came to rest either way, and
-                    // outside the scope that reads as a page the reader
-                    // turned.
-                    awaitReflowSettled(nav, before)
-                    // A position that never arrived, or one the reader
-                    // has since left, leaves the fit applied without a
-                    // restore. Fitting moves the text a little;
-                    // restoring the wrong chapter moves the reader out
-                    // of the chapter they are in.
-                    if (anchor != null && stillFitting()) {
-                        navigate(
-                            nav = nav,
-                            locator = anchor,
-                            event = NavigatorPositionEvent.PREFERENCE_REFLOW,
-                            verify = true,
-                        )
+            try {
+                val web = visibleWebView(root) ?: return@collect
+                // Keyed by the resource, the view, AND the layout generation.
+                // The first two are the same reason the image probe below
+                // keys as it does: the pager recycles a web view from one
+                // chapter into another, and the same instance is then a
+                // different document with its own notes to hide and its own
+                // pictures to fit. The generation is for an in-place reflow —
+                // a font or margin change `submitPreferences` applies to the
+                // live fragment, where view and href both survive and the old
+                // key would suppress the fresh repair forever. A mode switch
+                // restarts this whole effect on its own (effectiveScrolling is
+                // a key of it); what a mode switch actually needed was the
+                // content-bound `empty` latch fixed inside MathTypesetting.
+                val href = nav.currentLocator.value.href.toString()
+                val gen = layoutGeneration
+                val key = Triple(web, href, gen)
+                if (key == fitted) return@collect
+                // Do not commit the key, or repair, while this view is still
+                // showing a different resource than the position names. A jump
+                // publishes the target position before the web view under the
+                // reader has loaded it, so the view on hand is still the one in
+                // transit. Repairing that transitional document and committing the
+                // key against it is the whole jump bug: the real resource then
+                // lands on the *same* view under the *same* key, the guard above
+                // returns on every later pass, and the page is never typeset —
+                // which is why reading front-to-back (where the view is already
+                // the resource) renders fine and jumping does not. Until this view
+                // actually shows what the position names, this is a cheap look and
+                // return; the next layout pass, once the resource has landed, does
+                // the repair for real.
+                if (!ResourceAddress.shows(web.url, href)) return@collect
+                fitted = key
+                // Which position to come back to, decided before the reflow
+                // scope opens: the wait below is not a reflow, and holding
+                // the scope through it would read a page the reader turned
+                // in the meantime as text moving under them.
+                //
+                // The anchor is taken from the navigator rather than from
+                // reflowAnchor: that one belongs to a run of preference
+                // changes in the resource being left, and restoring to it
+                // would carry the reader back out of the one they just
+                // turned into.
+                //
+                // For the same reason it is taken only once the navigator's
+                // position names the resource this web view is showing.
+                // Readium puts a resource on screen before it publishes
+                // having moved to it, so the position on hand can still be
+                // the one the reader left — and restoring to that sends
+                // them back to it, which makes the resource they came from
+                // the newly visible one and starts the whole thing over.
+                // The saved position says nothing about that ping-pong,
+                // because a reflow does not persist, until the next page
+                // turn publishes wherever it came to rest.
+                val here = withTimeoutOrNull(ANCHOR_ARRIVAL_MS) {
+                    nav.currentLocator.first {
+                        ResourceAddress.shows(web.url, it.href.toString())
                     }
                 }
+                // Taken here rather than at the top of the run, because
+                // the wait above is itself the arrival of whatever move
+                // brought this resource in: marking before it would refuse
+                // the restore after every chapter turn, which is most of
+                // the times a resource is laid out at all.
+                //
+                // It is still [IssuedMoves.NONE] when the reader is being
+                // sent somewhere within this resource — a contents entry
+                // pointing at a fragment of it — because the position the
+                // wait settled for is the one published as the resource
+                // loaded, not the one they asked for.
+                val since = moves.mark(SystemClock.elapsedRealtime())
+                // Whether the resource this run is for is still the one on
+                // screen, the one the navigator names, and the one the
+                // reader has not since been sent away from. Waiting above
+                // and taking the scope below are both places the reader can
+                // turn a page, and everything after them speaks to the
+                // document in front of them: a capture takes its words from
+                // it, a restore puts the reader back into it. Asked again
+                // rather than assumed, at each point where the answer could
+                // have changed — and asked of the moves issued as well,
+                // because a jump the reader has just made shows in neither
+                // the position nor the views for a moment yet.
+                fun stillFitting(): Boolean =
+                    web === visibleWebView(root) &&
+                        ResourceAddress.shows(web.url, nav.currentLocator.value.href.toString()) &&
+                        moves.unchangedSince(since)
+                reflow.within {
+                    val anchor = here?.takeIf { stillFitting() }?.let { capture(nav, it) }
+                    val before = ExactLocatorAnchor.layoutSignature(nav)
+                    if (repairPage(nav)) {
+                        // Settled before the scope closes whether or not
+                        // there is an anchor: the text the fit moved
+                        // reports where it came to rest either way, and
+                        // outside the scope that reads as a page the reader
+                        // turned.
+                        awaitReflowSettled(nav, before)
+                        // A position that never arrived, or one the reader
+                        // has since left, leaves the fit applied without a
+                        // restore. Fitting moves the text a little;
+                        // restoring the wrong chapter moves the reader out
+                        // of the chapter they are in.
+                        if (anchor != null && stillFitting()) {
+                            navigate(
+                                nav = nav,
+                                locator = anchor,
+                                event = NavigatorPositionEvent.PREFERENCE_REFLOW,
+                                verify = true,
+                            )
+                        }
+                    }
+                }
+            } catch (e: CancellationException) {
+                // The loop is going down anyway, and a cancelled repair
+                // is not an answer.
+                throw e
+            } catch (_: Exception) {
+                fitted = null
+                // A repair that throws — a resource laid out in a shape
+                // this pass did not expect, say — must not take the whole
+                // book's typesetting down with it. Without this guard, one
+                // resource whose repair throws ends this coroutine for the
+                // rest of the session: every later layout pass and page
+                // turn is still delivered to a dead collector, so nothing
+                // ever gets repaired again, on any resource, in either
+                // reading mode — silently, since nothing here crashes the
+                // app to say so. Skipping this pass and trying again on
+                // the next layout event is the whole fix.
             }
         }
     }
@@ -1570,28 +1664,41 @@ fun ReaderScreen(
         val nav = navigator ?: return@LaunchedEffect
         val root = nav.publicationView
         var withImages: Pair<WebView, String>? = null
+        var withPanels: Pair<WebView, String>? = null
         merge(nav.currentLocator.map { }, layoutPasses(root)).collect {
             val web = visibleWebView(root) ?: return@collect
             // Keyed by the resource as well as by the view, because the
             // pager recycles a web view from one chapter into another and
             // the same instance is then a different document.
             val key = web to nav.currentLocator.value.href.toString()
-            if (key == withImages) return@collect
             // Willing to ask until told otherwise. A wrong yes costs one
             // script evaluation on a touch; a wrong no is the feature
             // quietly not working, and the gap between a page turn and
             // this answer is exactly where a reader lands on a plate.
-            touch.resourceHasImages = true
-            val has = ImageAtPoint.hasImages(web)
-            touch.resourceHasImages = has
-            // Only a yes is remembered. A no is either the truth about a
-            // page of plain text or a document that had not finished
-            // loading when it was asked, and from here the two look the
-            // same — so a no is asked again the next time the page moves.
-            // That costs one trivial script per turn, off the touch path,
-            // which is where the cost mattered; a remembered no costs the
-            // whole feature on the chapter it was wrong about.
-            withImages = if (has) key else null
+            //
+            // A chapter's mathematics is marked by the same page repair that
+            // re-lays the text out, so a pass before it has run is a no that
+            // the next pass corrects. Both questions are asked in the same
+            // walk of the view tree because they are asked of the same thing.
+            if (key != withImages) {
+                touch.resourceHasImages = true
+                val has = ImageAtPoint.hasImages(web)
+                touch.resourceHasImages = has
+                // Only a yes is remembered. A no is either the truth about a
+                // page of plain text or a document that had not finished
+                // loading when it was asked, and from here the two look the
+                // same — so a no is asked again the next time the page moves.
+                // That costs one trivial script per turn, off the touch path,
+                // which is where the cost mattered; a remembered no costs the
+                // whole feature on the chapter it was wrong about.
+                withImages = if (has) key else null
+            }
+            if (key != withPanels) {
+                touch.resourceHasPanels = true
+                val has = FormulaPan.hasPanels(web)
+                touch.resourceHasPanels = has
+                withPanels = if (has) key else null
+            }
         }
     }
 
@@ -2343,6 +2450,86 @@ fun ReaderScreen(
     }
 
     /**
+     * What formula, if any, could be panned under a fresh finger.
+     *
+     * Asked as the finger lands rather than when it has travelled, because
+     * by the time a drag reads as sideways the answer has to be in hand: the
+     * page turn is claimed at that same moment and once it is, the page has
+     * already lifted off the book. A resource with nothing overflowing in it
+     * — most pages of most books — runs no script at all, and the touch is
+     * answered before the finger moves.
+     *
+     * Nothing waits for this. An answer that is late is not a turn delayed:
+     * the drag is read as a turn, which is what it was before the maths could
+     * be panned at all.
+     */
+    fun probePanUnderFinger(position: Offset) {
+        val serial = touch.serial
+        val nav = navigatorNow ?: run { touch.panAnswered = true; return }
+        if (!touch.resourceHasPanels) { touch.panAnswered = true; return }
+        val web = visibleWebView(nav.publicationView)
+            ?: run { touch.panAnswered = true; return }
+        if (web.width <= 0 || web.height <= 0) { touch.panAnswered = true; return }
+        val origin = IntArray(2)
+        web.getLocationInWindow(origin)
+        val fx = (boxInWindow.x + position.x - origin[0]) / web.width
+        val fy = (boxInWindow.y + position.y - origin[1]) / web.height
+        effectScope.launch {
+            val hits = FormulaPan.at(web, fx, fy)
+            if (touch.serial != serial) return@launch
+            touch.panAnswered = true
+            formulaPan.take(hits)
+            // The view this answer is about, kept so a claim can measure the
+            // box it is moving against. Null when nothing is pannable here.
+            touch.panWeb = if (hits == null) null else web
+        }
+    }
+
+    /**
+     * Writes the box under the finger to where this drag has taken it.
+     *
+     * The position is absolute and computed on the main thread from the
+     * finger's travel, so a frame never waits on the page to be told what it
+     * moved: the write is issued and the touch goes on. [FormulaPan.scrollTo]
+     * queues each write on the document's own thread, last one wins, and the
+     * formula keeps pace with the finger rather than trailing it and snapping.
+     *
+     * The one thing still awaited is the box's range, measured once as a claim
+     * lands (or as a drag hands off to the box enclosing it at an edge) — that
+     * is what lets the app clamp the absolute position itself, and it is asked
+     * a single time per box, not per frame.
+     */
+    fun pumpPan(travel: Float) {
+        val web = touch.panWeb ?: return
+        val hit = formulaPan.hit ?: return
+        if (formulaPan.needsRange) {
+            // A frame that lands while the last box's range is still being
+            // measured neither waits nor re-asks: the answer, when it comes,
+            // is drawn by the next frame's call with wherever the finger has
+            // got to by then. A claim with no measurement in flight starts one.
+            if (touch.ranging) return
+            touch.ranging = true
+            val serial = touch.serial
+            val scalePx = web.width.toFloat()
+            val id = hit.id
+            effectScope.launch {
+                val range = FormulaPan.range(web, id)
+                // The finger has left this touch — the page changed, or a new
+                // touch began — so this answer is about nothing to move.
+                if (touch.serial == serial) formulaPan.give(range, scalePx)
+                touch.ranging = false
+            }
+            return
+        }
+        val px = formulaPan.offset(travel) ?: return
+        FormulaPan.scrollTo(web, hit.id, px)
+        // A box pinned at an edge hands the drag to the box enclosing it, whose
+        // range is not measured yet — so the same frame is re-pumped to start
+        // that measurement rather than leaving the finger pressed to a wall.
+        if (formulaPan.refused(travel)) pumpPan(travel)
+    }
+
+    /**
      * What the page and the chrome become while a picture is full screen.
      *
      * The viewer is drawn as the last child of the same box rather than
@@ -2415,15 +2602,23 @@ fun ReaderScreen(
                                 touch.moved = false
                                 touch.downAt = down[0].position
                                 touch.startedAt = SystemClock.uptimeMillis()
+                                touch.movedAt = touch.startedAt
                                 touch.claim.begin(touch.startedAt)
                                 pinchHeld = false
                                 pageTurnDrag.reset()
+                                formulaPan.reset()
+                                touch.ranging = false
+                                touch.panAnswered = false
+                                touch.panWeb = null
                                 velocity.resetTracking()
                                 probeUnderFinger(down[0].position)
+                                probePanUnderFinger(down[0].position)
                             }
 
-                            (down[0].position - touch.downAt).getDistance() > slop ->
+                            (down[0].position - touch.downAt).getDistance() > slop -> {
+                                if (!touch.moved) touch.movedAt = SystemClock.uptimeMillis()
                                 touch.moved = true
+                            }
                         }
                         /*
                          * A sideways drag under Lift or None curls the
@@ -2438,6 +2633,17 @@ fun ReaderScreen(
                          * Readium's own, which is that motion already.
                          */
                         if (down.size == 1) velocity.addPointerInputChange(down[0])
+                        if (down.isEmpty() && formulaPan.panning) {
+                            // Lifting out of a pan is not a tap on the page,
+                            // and it is not a scroll either: the touch was
+                            // consumed all the way to here, so the lift is
+                            // spent the same way.
+                            formulaPan.release()
+                            touch.ranging = false
+                            touch.panWeb = null
+                            event.changes.forEach { it.consume() }
+                            continue
+                        }
                         if (down.isEmpty()) {
                             if (pageTurnDrag.release(velocity.calculateVelocity().x)) {
                                 event.changes.forEach { it.consume() }
@@ -2450,6 +2656,86 @@ fun ReaderScreen(
                             // without travelling would otherwise never be
                             // seen at all.
                             val travelled = down[0].position - touch.downAt
+                            // A wide formula under the finger takes a sideways
+                            // drag before the page is offered it, and the page
+                            // never sees the touch after that. Asked first
+                            // because the turn it refuses is already a page
+                            // lifted off the book by the time it could be
+                            // given back.
+                            val panning = if (!chromeDrawn() && selection == null &&
+                                tappedSelection == null && PageTurnDrag.sideways(travelled.x, travelled.y)
+                            ) {
+                                // The page has not said what is under the
+                                // finger yet. That is now the exception: the
+                                // probe only runs when the finger lands on a
+                                // box the page was measured to have, so plain
+                                // text was answered before the finger moved
+                                // and comes here with nothing left to wait
+                                // for. Over a formula, held rather than
+                                // handed to the turn: the answer is on its
+                                // way, and a turn claimed now is a formula
+                                // the reader was reaching for, thrown past
+                                // them. Bounded by the same budget a pinch is
+                                // held for, so a document that will not
+                                // answer costs one short pause and then
+                                // behaves as it always did.
+                                //
+                                // Held in a scrolled book too, which is what
+                                // makes the two modes feel the same over a
+                                // formula — and what stops the drag from
+                                // taking the whole page sideways instead:
+                                // that is the one answer the scroll engine
+                                // gives when nobody claims the touch first.
+                                if (!touch.panAnswered &&
+                                    SystemClock.uptimeMillis() - touch.startedAt < PAN_HOLD_MS
+                                ) {
+                                    true
+                                } else if (touch.panAnswered) {
+                                    formulaPan.offer(
+                                        pointers = down.size,
+                                        dx = travelled.x,
+                                        dy = travelled.y,
+                                        slop = slop,
+                                        // A drag that set off at once is the
+                                        // reader going somewhere; one that
+                                        // began by sitting still is the
+                                        // reader reaching for what is under
+                                        // the thumb. Measured from the first
+                                        // movement rather than from now, or
+                                        // every slow page turn would read as
+                                        // a hold and be taken. The distinction
+                                        // only matters over a line of prose
+                                        // with a formula in it — a box holding
+                                        // nothing but mathematics is claimed
+                                        // either way.
+                                        held = touch.movedAt - touch.startedAt >= PAN_HOLD_MS,
+                                    )
+                                } else {
+                                    // Past the budget and still no answer. The
+                                    // turn is offered the drag, but the
+                                    // formula is not told it has lost: an
+                                    // answer on its way can still take the
+                                    // next frame, and settling it here would
+                                    // cost the touch its maths over a page
+                                    // that was only slow to reply.
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                            if (panning) {
+                                // Held, or ours: either way the touch does not
+                                // reach the page or the turn. Only once the
+                                // formula has taken the drag is anything sent.
+                                // The offset is absolute, computed from the
+                                // finger's total travel, so a frame never waits
+                                // on the page to be told what it moved — which
+                                // is what let the formula keep pace with the
+                                // finger instead of trailing it and snapping.
+                                if (formulaPan.panning) pumpPan(travelled.x)
+                                event.changes.forEach { it.consume() }
+                                continue
+                            }
                             val claimed = pageTurnDrag.offer(
                                 pointers = down.size,
                                 dx = travelled.x,
@@ -2714,21 +3000,6 @@ fun ReaderScreen(
             )
         }
 
-        // The bars come and go with the chrome, so this corner takes the
-        // live navigation-bar inset: it lifts the pills clear of a bar
-        // that is actually there, and asks for nothing when there is
-        // none. Reading it ignoring visibility parked everything a
-        // bar's height up an empty screen.
-        //
-        // The inset is taken here as a spacer rather than as padding on
-        // the column, because the scrubber must not float on it: a
-        // scrolled page runs all the way to the screen's edge, and a
-        // panel lifted a bar's height off that edge leaves a strip of
-        // the book printed underneath it, across the gesture pill
-        // (#223). The scrubber takes the same inset inside its own
-        // paper instead, so the panel reaches the edge while its
-        // controls stay where they are.
-        val scrubberShown = !showingEnd && chromeVisible && progress != null
         Column(
             Modifier
                 .align(Alignment.BottomCenter)
@@ -2773,33 +3044,6 @@ fun ReaderScreen(
                         )
                     }
                 }
-                if (scrubberShown) {
-                    ChromeEdgeFade(theme = readingTheme, solidAtTop = false)
-                    ReadingScrubber(
-                        progress = progress,
-                        theme = readingTheme,
-                        chapterTicks = remember(progress?.totalPositions) {
-                            onProgressAction.chapterTicks()
-                        },
-                        titleAtPosition = onProgressAction.chapterTitleAtPosition,
-                        positionAtProgression = onProgressAction.positionAtProgression,
-                        onSeek = { position ->
-                            onProgressAction.locatorAtPosition(position)?.let {
-                                onProgressAction.onJump()
-                                navigateLater(it, NavigatorPositionEvent.LOCAL_JUMP)
-                            }
-                        },
-                        onGoToPage = {
-                            if (onProgressAction.goToPagePrompt() != null) goToPage = true
-                        },
-                        onGoToPercent = { goToPercent = true },
-                    )
-                }
-            }
-            // The panel's own paper covers the bar when the panel is
-            // there; this is the same lift for the times it is not.
-            if (!scrubberShown) {
-                Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
             }
         }
 
@@ -3422,7 +3666,7 @@ class ReaderAnnotationActions(
 /**
  * Puts right what a stylesheet alone cannot, in the document on screen.
  *
- * Three unrelated faults are repaired the same way — by measuring the live
+ * Four unrelated faults are repaired the same way — by measuring the live
  * DOM and writing an attribute back into it — so they are asked together
  * and answer as one: whether the page moved. Each is independent of the
  * others and none is allowed to hide another's answer, because the
@@ -3437,11 +3681,25 @@ class ReaderAnnotationActions(
  * from under them.
  */
 private suspend fun repairPage(nav: EpubNavigatorFragment): Boolean {
+    // The maths goes first: it is the only one of these that can make a
+    // box too wide for the page — and the only one that can make a box
+    // that was too wide fit, since rendering a formula replaces a line of
+    // literal TeX with something that has a shape. What it leaves behind
+    // is what the fit below then measures, so the two are in this order
+    // and not another.
+    //
+    // The maths answer is not waited on to a settled render here. The render
+    // is a chain of timer slices that, once armed, finishes on its own inside
+    // the page, so a pass that meets it still painting simply asks again on
+    // the next layout prompt rather than holding this one open for it. The
+    // caller runs this off the collect loop, so even the bounded wait inside
+    // `apply` costs the reader nothing they are waiting on.
+    val typeset = MathTypesetting.apply(nav) == MathTypesetting.Result.CHANGED
     val fitted = WideContentFit.apply(nav) == WideContentFit.Result.CHANGED
     val here = nav.currentLocator.value.locations.fragments
     val noted = FootnoteLayout.apply(nav, here) == FootnoteLayout.Result.CHANGED
     val led = SelectionHandleFix.apply(nav) == SelectionHandleFix.Result.CHANGED
-    return fitted || noted || led
+    return typeset || fitted || noted || led
 }
 
 /**
@@ -3778,6 +4036,16 @@ private class TouchProbe {
     var pointers = 0
     var downAt = Offset.Zero
     var startedAt = 0L
+
+    /**
+     * When this touch first travelled past the slop, or [startedAt] if it
+     * never has.
+     *
+     * The gap between the two is how long the reader held still before
+     * moving, which is what distinguishes reaching for the thing under the
+     * thumb from setting off somewhere.
+     */
+    var movedAt = 0L
     var moved = false
     var answered = false
     var opening = false
@@ -3795,6 +4063,30 @@ private class TouchProbe {
 
     /** Whether the resource on screen has any image in it; see the probe. */
     var resourceHasImages = false
+
+    /** Whether the resource on screen has a formula wider than the page. */
+    var resourceHasPanels = false
+
+    /**
+     * Whether the page has said what is under this touch, or never will.
+     *
+     * The difference matters at the moment a drag turns sideways: a touch
+     * the document has answered about is decided, and one it has not is
+     * still in flight — held rather than given up, because a reader who
+     * set off at once over a formula would otherwise have that formula
+     * turned past them.
+     */
+    var panAnswered = false
+
+    /**
+     * The box currently held under a finger, and the view it lives in. Kept so
+     * a claim can measure that box's range once; the pan then writes absolute
+     * positions against it without another round-trip per frame.
+     */
+    var panWeb: WebView? = null
+
+    /** Whether a box's range measurement is in flight, so frames don't re-ask. */
+    var ranging = false
 
     /**
      * Whether a resize has had hold of this touch at any point.

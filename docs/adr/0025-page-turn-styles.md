@@ -321,6 +321,30 @@ bar. Not decided here.
 > is not obliged to give it — the same reasoning, and the same observer,
 > as the held scroll position published there already.
 
+> The curl was revealing the page it stood over before that page had
+> arrived. The snapshot is of the page being left, and it lies flat until
+> the curl pulls it back to show what is underneath — but `goForward`
+> only *orders* the columns to scroll, as script on the web view's own
+> queue, and returns long before they have moved. The flat hold was a
+> fixed two frames, a guess at when that scroll had landed and painted,
+> and a reader dragging across a page still laying out its mathematics
+> outran the guess: the curl peeled back onto the very page they had not
+> left yet, which then lurched over when the web view finally repainted.
+> The animation played while the screen stayed behind it.
+>
+> So the hold is not a count of frames any more. The curl lies flat —
+> with the finger free to move it and keep updating its travel, so the
+> drag itself is no less responsive — until the navigator's position has
+> actually changed from the one the turn started at. Readium publishes a
+> locator once the columns have stopped scrolling, and two adjacent
+> columns differ in it by a whole page, so that change is the fact that
+> the page underneath is now the one the snapshot stands in for, not a
+> bet on timing. It is still bounded, because a turn onto a boundary that
+> does not move publishes nothing; on that timeout the curl reveals what
+> it has been standing over, which is exactly where the fixed two frames
+> left it. The gesture is claimed and answered as before — only the
+> moment of revealing moved off the frame clock and onto the position.
+
 *Where:* `data/settings/ReaderPrefs.kt`,
 `data/settings/ReaderPreferencesRepository.kt`,
 `data/settings/AppSettings.kt`, `reader/chrome/PageTurnEffect.kt`,

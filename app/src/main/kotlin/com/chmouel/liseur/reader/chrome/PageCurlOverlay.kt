@@ -16,7 +16,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -65,13 +64,32 @@ class PageCurlState(private val scope: CoroutineScope) {
         private set
 
     /**
-     * Held for the first frames after the navigator has jumped, with the
-     * snapshot drawn flat, so that a frame in which the web view is
-     * still painting the new page does not show a strip of the old one
-     * where the curl has already begun.
+     * Held flat after the navigator has jumped, with the snapshot drawn
+     * over the web view, so the curl does not begin — and pull back a
+     * sheet to reveal what lies under it — until the page the reader
+     * turned to has actually arrived.
+     *
+     * This is deliberately not a fixed number of frames. The jump the
+     * snapshot stands over is asynchronous: `goForward` orders a scroll
+     * of the columns on the web view's own queue and returns long before
+     * they have moved. A fixed frame count is a guess about when that
+     * scroll has landed and painted, and on a page with mathematics to
+     * lay out the guess is regularly wrong — which is exactly the
+     * "the animation plays but the screen stays on the old page, then
+     * lurches over" the reader sees, because revealing early shows the
+     * very page they were already on.
+     *
+     * So the caller hands over [pageReady], a suspending wait that
+     * returns the moment the turn is known to have arrived (or after a
+     * bounded timeout, which is the old guess and no worse). The finger
+     * is free to move and keep updating [travel] meanwhile — the snapshot
+     * just lies flat until then — so nothing about the drag feels slower;
+     * only the moment of revealing is placed on the real page instead of
+     * a bet on timing.
      */
     private var settled by mutableStateOf(false)
     private var running: Job? = null
+    private var settleToken = 0L
 
     val isRunning: Boolean get() = page != null
 
@@ -79,8 +97,15 @@ class PageCurlState(private val scope: CoroutineScope) {
     var held = false
         private set
 
-    fun begin(bitmap: ImageBitmap, grabY: Float, movesLeft: Boolean, paper: Int) {
+    fun begin(
+        bitmap: ImageBitmap,
+        grabY: Float,
+        movesLeft: Boolean,
+        paper: Int,
+        pageReady: suspend () -> Unit = {},
+    ) {
         running?.cancel()
+        val token = ++settleToken
         this.grabY = grabY
         this.movesLeft = movesLeft
         this.paper = paper
@@ -90,8 +115,11 @@ class PageCurlState(private val scope: CoroutineScope) {
         held = true
         page = bitmap
         running = scope.launch {
-            repeat(SETTLE_FRAMES) { withFrameNanos { } }
-            settled = true
+            // A begin the reader has already abandoned, or a newer turn,
+            // must not settle the snapshot it no longer owns; every begin
+            // bumps the token and a superseded one leaves [settled] alone.
+            pageReady()
+            if (token == settleToken) settled = true
         }
     }
 
@@ -147,7 +175,6 @@ class PageCurlState(private val scope: CoroutineScope) {
 
     private companion object {
         const val SETTLE_STIFFNESS = 600f
-        const val SETTLE_FRAMES = 2
     }
 }
 
